@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Боюсь стану взрослым скоро</title>
+  <style>
+    :root {
+      --panel: rgba(15, 23, 42, 0.74);
+      --panel-2: rgba(255, 255, 255, 0.9);
+      --accent: #fbbf24;
+      --accent-2: #22c55e;
+      --text: #ffffff;
+      --shadow: 0 16px 44px rgba(15, 23, 42, 0.25);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #87ceeb;
+      color: var(--text);
+      overscroll-behavior: none;
+      touch-action: none;
+      user-select: none;
+    }
+
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100dvh;
+      display: block;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .hud {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 5;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: start;
+      pointer-events: none;
+    }
+
+    .score-card {
+      min-width: 0;
+      border: 1px solid rgba(255,255,255,0.24);
+      border-radius: 20px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      padding: 10px 12px 11px;
+    }
+
+    .score-row {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      flex-wrap: wrap;
+      font-weight: 850;
+      line-height: 1.05;
+    }
+
+    .distance {
+      font-size: clamp(26px, 8vw, 44px);
+      letter-spacing: -0.04em;
+      text-shadow: 0 2px 0 rgba(0,0,0,0.18);
+    }
+
+    .meters {
+      font-size: 15px;
+      color: rgba(255,255,255,0.84);
+      font-weight: 750;
+    }
+
+    .best {
+      margin-top: 5px;
+      color: rgba(255,255,255,0.82);
+      font-size: 13px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .hint {
+      margin-top: 6px;
+      color: rgba(255,255,255,0.9);
+      font-size: clamp(12px, 3.5vw, 14px);
+      font-weight: 650;
+      line-height: 1.24;
+    }
+
+    .controls { pointer-events: auto; display: flex; gap: 8px; }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 14px;
+      min-height: 44px;
+      font: 850 14px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #1f2937;
+      background: linear-gradient(180deg, #fde68a 0%, #fbbf24 100%);
+      box-shadow: 0 8px 0 #b7791f, 0 17px 30px rgba(0,0,0,0.22);
+      transform: translateY(0);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button:active {
+      transform: translateY(5px);
+      box-shadow: 0 3px 0 #b7791f, 0 10px 20px rgba(0,0,0,0.18);
+      filter: saturate(1.08);
+    }
+
+    .center-tip {
+      position: fixed;
+      left: 50%;
+      bottom: calc(22px + env(safe-area-inset-bottom));
+      z-index: 4;
+      transform: translateX(-50%);
+      width: min(92vw, 520px);
+      border-radius: 22px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.88);
+      color: #203047;
+      box-shadow: var(--shadow);
+      text-align: center;
+      font-weight: 800;
+      line-height: 1.25;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .center-tip.hidden {
+      opacity: 0;
+      transform: translateX(-50%) translateY(18px);
+    }
+
+    @media (max-width: 370px) {
+      .hud { grid-template-columns: 1fr; }
+      .controls { justify-self: end; margin-top: -2px; }
+      button { padding: 10px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Игра: Лар отбивает одноклассника битой"></canvas>
+
+  <div class="hud">
+    <div class="score-card">
+      <div class="score-row">
+        <div class="distance"><span id="distance">0</span> м</div>
+        <div class="meters" id="stateLabel">Готово</div>
+      </div>
+      <div class="best">Рекорд: <span id="best">0</span> м</div>
+      <div class="hint" id="hint">1-й тап — подбросить одноклассника. 2-й тап — ударить битой.</div>
+    </div>
+    <div class="controls">
+      <button id="newGame" type="button">Новая игра</button>
+    </div>
+  </div>
+
+  <div class="center-tip" id="centerTip">Тапните по экрану, чтобы подбросить одноклассника</div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const distanceEl = document.getElementById('distance');
+      const bestEl = document.getElementById('best');
+      const hintEl = document.getElementById('hint');
+      const stateLabelEl = document.getElementById('stateLabel');
+      const centerTipEl = document.getElementById('centerTip');
+      const newGameBtn = document.getElementById('newGame');
+
+      // Все фото загружаются один раз. При каждом новом раунде ниже выбирается
+      // независимое случайное фото: у всех файлов одинаковая вероятность.
+      function loadImage(src) {
+        const image = new Image();
+        image.src = src;
+        return image;
+      }
+
+      const backgroundImage = loadImage('assets/back2.png');
+      const larBeforeImage = loadImage('assets/lar-before.png');
+      const larAfterImage = loadImage('assets/lar-after.png');
+      const classmateImages = [
+        loadImage('assets/classmates/berlin.png'),
+        loadImage('assets/classmates/borya.png'),
+        loadImage('assets/classmates/vanya.png'),
+        loadImage('assets/classmates/vas.png'),
+        loadImage('assets/classmates/dar.png'),
+        loadImage('assets/classmates/dima.png'),
+        loadImage('assets/classmates/ira.png'),
+        loadImage('assets/classmates/lena.png'),
+        loadImage('assets/classmates/malya.png'),
+        loadImage('assets/classmates/nuf.png'),
+        loadImage('assets/classmates/ost.png'),
+        loadImage('assets/classmates/pasha.png'),
+        loadImage('assets/classmates/sam.png'),
+        loadImage('assets/classmates/seryy.png'),
+        loadImage('assets/classmates/sternad.png'),
+        loadImage('assets/classmates/tanya.png'),
+        loadImage('assets/classmates/tok.png'),
+        loadImage('assets/classmates/frenk.png'),
+        loadImage('assets/classmates/yulya.png'),
+        loadImage('assets/classmates/yar.png')
+      ];
+      let currentClassmateImage = classmateImages[0];
+
+      function chooseRandomClassmate() {
+        currentClassmateImage = classmateImages[Math.floor(Math.random() * classmateImages.length)];
+      }
+
+      const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+      const easeInOut = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const TAU = Math.PI * 2;
+
+      let W = 0;
+      let H = 0;
+      let dpr = 1;
+      let scale = 1;
+      let groundY = 0;
+      let cameraX = 0;
+      let lastTime = 0;
+      let rafId = 0;
+
+      const pxPerMeter = 4.2;
+      // В превью Arena страница открывается в sandbox-iframe без allow-same-origin,
+      // поэтому прямой доступ к localStorage может выбросить SecurityError и остановить всю игру.
+      // Делаем безопасное хранилище: в обычном браузере рекорд сохраняется, в sandbox — живёт в памяти.
+      const storage = (() => {
+        let memoryBest = 0;
+        try {
+          const key = '__classmate_flight_storage_test__';
+          window.localStorage.setItem(key, '1');
+          window.localStorage.removeItem(key);
+          return {
+            getBest: () => Number(window.localStorage.getItem('classmateFlightBest') || 0) || 0,
+            setBest: value => window.localStorage.setItem('classmateFlightBest', String(value)),
+          };
+        } catch (err) {
+          return {
+            getBest: () => memoryBest,
+            setBest: value => { memoryBest = Number(value) || 0; },
+          };
+        }
+      })();
+
+      let best = storage.getBest();
+      let state = 'ready'; // ready | toss | flying | ended
+      let message = 'Тапните по экрану, чтобы подбросить одноклассника';
+      let distanceMeters = 0;
+      let finalDistance = 0;
+      let hitQuality = 0;
+      let particles = [];
+      let screenShake = 0;
+      let flash = 0;
+      let windPhase = 0;
+      let endTimer = 0;
+      let mines = [];
+      let nextMineMeters = 0;
+
+      const player = {
+        wx: 88,
+        swing: 0,
+        swingTime: 0,
+        swingDuration: 22,
+        blink: 0,
+      };
+
+      const classmate = {
+        wx: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        r: 17,
+        rot: 0,
+        spin: 0,
+        bounces: 0,
+        alive: true,
+        squish: 0,
+      };
+
+      const origin = { wx: 0 };
+
+      function contactPoint() {
+        return {
+          wx: player.wx + 68 * scale,
+          y: groundY - 196 * scale,
+        };
+      }
+
+      function throwPoint() {
+        // До удара одноклассник ждёт справа от Лар, с заметным зазором.
+        return {
+          wx: player.wx + 190 * scale,
+          y: groundY - 196 * scale,
+        };
+      }
+
+      function resize() {
+        dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+        W = Math.floor(window.innerWidth);
+        H = Math.floor(window.innerHeight);
+        canvas.width = Math.floor(W * dpr);
+        canvas.height = Math.floor(H * dpr);
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        scale = clamp(Math.min(W / 420, H / 720), 0.72, 1.16);
+        groundY = Math.round(H * 0.873);
+        player.wx = 145 * scale;
+        origin.wx = throwPoint().wx;
+        if (state === 'ready') {
+          placeClassmateAtStart();
+          generateMines();
+        }
+      }
+
+      function placeClassmateAtStart() {
+        const p = throwPoint();
+        classmate.wx = p.wx;
+        classmate.y = p.y;
+        classmate.vx = 0;
+        classmate.vy = 0;
+        classmate.r = 48 * scale;
+        classmate.rot = -0.1;
+        classmate.spin = 0;
+        classmate.bounces = 0;
+        classmate.squish = 0;
+        cameraX = 0;
+      }
+
+      function resetGame() {
+        chooseRandomClassmate();
+        state = 'ready';
+        message = 'Тапните по экрану, чтобы подбросить одноклассника';
+        distanceMeters = 0;
+        finalDistance = 0;
+        hitQuality = 0;
+        player.swing = 0;
+        player.swingTime = 0;
+        particles = [];
+        screenShake = 0;
+        flash = 0;
+        endTimer = 0;
+        windPhase = 0;
+        mines = [];
+        nextMineMeters = 0;
+        placeClassmateAtStart();
+        generateMines();
+        updateHud();
+      }
+
+      function startToss() {
+        if (state !== 'ready') return;
+        const p = throwPoint();
+        state = 'toss';
+        message = 'Ждите, пока одноклассник опустится к бите. Слишком рано — промах сверху!';
+        classmate.wx = p.wx;
+        classmate.y = p.y;
+        // Подброс стал выше и чуть дольше: теперь есть явный ранний момент,
+        // когда одноклассник пролетает над битой и второй тап даст промах по высоте.
+        // Летит от отдельной стартовой точки к бите, а не склеивается с Лар.
+        classmate.vx = -0.80 * scale;
+        classmate.vy = -9.6 * scale;
+        classmate.rot = -0.25;
+        classmate.spin = 0.11;
+        classmate.bounces = 0;
+        classmate.squish = 0;
+        player.swing = 0;
+        hitQuality = 0;
+        cameraX = 0;
+        spawnPuff(p.wx, p.y + 14 * scale, 10, '#f8fafc', 2.4);
+        updateHud();
+      }
+
+      function swingBat() {
+        if (state !== 'toss') return;
+
+        player.swing = 1;
+        player.swingTime = 0;
+
+        const c = contactPoint();
+        const dx = classmate.wx - c.wx;
+        const dy = classmate.y - c.y;
+        const nx = dx / (82 * scale);
+        const ny = dy / (92 * scale);
+        const zoneScore = clamp(1 - Math.hypot(nx, ny), 0, 1);
+        const heightBonus = clamp(1 - Math.abs(dy / scale) / 110, 0, 1);
+        const sideBonus = clamp(1 - Math.abs(dx / scale) / 92, 0, 1);
+        // Если одноклассник ещё летит вверх, удар получается хуже: хороший момент — на спуске.
+        const descentBonus = clamp((classmate.vy / scale + 4.2) / 10.5, 0.42, 1.05);
+        hitQuality = clamp((zoneScore * 0.76 + heightBonus * sideBonus * 0.24) * descentBonus, 0, 1);
+
+        if (hitQuality > 0.18) {
+          const sweet = easeOutCubic(hitQuality);
+          const slightlyEarly = clamp((-dx / scale) / 50, -0.45, 0.45);
+          const descendingLift = clamp(classmate.vy / scale, -8, 10) * 0.035;
+          state = 'flying';
+          message = hitQuality > 0.78 ? 'Отличный удар!' : hitQuality > 0.48 ? 'Хороший удар!' : 'Краем биты!';
+          classmate.vx = (17.2 + 17.8 * sweet + slightlyEarly * 2.1) * scale;
+          classmate.vy = (-8.8 - 10.8 * sweet + clamp(dy / scale, -34, 34) * 0.032 + descendingLift) * scale;
+          classmate.spin = (-0.25 - 0.36 * sweet) * (classmate.vx > 0 ? 1 : -1);
+          classmate.squish = 1;
+          screenShake = 7 + 12 * sweet;
+          flash = 1;
+          spawnStarBurst(classmate.wx, classmate.y, Math.round(14 + 18 * sweet));
+        } else {
+          state = 'flying';
+          if (dy < -112 * scale) {
+            message = 'Промах: одноклассник слишком высоко над битой!';
+          } else if (dy > 96 * scale) {
+            message = 'Промах: одноклассник уже слишком низко.';
+          } else if (dx < -72 * scale) {
+            message = 'Промах: рановато, одноклассник ещё не долетел до биты.';
+          } else if (dx > 82 * scale) {
+            message = 'Промах: поздно, одноклассник пролетел мимо.';
+          } else {
+            message = 'Свист! Почти, но мимо.';
+          }
+          // При промахе бита не добавляет искусственный импульс: одноклассник продолжает
+          // свою дугу и падает/отскакивает уже по физике.
+          classmate.vx = Math.max(classmate.vx, 1.15 * scale);
+          classmate.spin = 0.16 * (classmate.vx >= 0 ? 1 : -1);
+          screenShake = 1.5;
+          spawnPuff(c.wx, c.y, 7, '#cbd5e1', 1.8);
+        }
+        updateHud();
+      }
+
+      function handleTap(ev) {
+        ev.preventDefault();
+        if (state === 'ready') startToss();
+        else if (state === 'toss') swingBat();
+        else if (state === 'ended') resetGame();
+      }
+
+      canvas.addEventListener('pointerdown', handleTap, { passive: false });
+      newGameBtn.addEventListener('pointerdown', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        resetGame();
+      }, { passive: false });
+      window.addEventListener('resize', resize);
+      window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+
+      function spawnPuff(wx, y, count, color, speed) {
+        for (let i = 0; i < count; i++) {
+          const a = Math.random() * TAU;
+          const v = (0.6 + Math.random()) * speed * scale;
+          particles.push({
+            wx, y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v - 0.6 * scale,
+            life: 24 + Math.random() * 18,
+            maxLife: 42,
+            r: (2 + Math.random() * 5) * scale,
+            color,
+            type: 'puff',
+          });
+        }
+      }
+
+      function spawnStarBurst(wx, y, count) {
+        const colors = ['#fff7ad', '#fde047', '#fb923c', '#fef3c7', '#ffffff'];
+        for (let i = 0; i < count; i++) {
+          const a = Math.random() * TAU;
+          const v = (2.4 + Math.random() * 6.5) * scale;
+          particles.push({
+            wx, y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v,
+            life: 28 + Math.random() * 18,
+            maxLife: 46,
+            r: (2 + Math.random() * 4) * scale,
+            color: colors[i % colors.length],
+            type: 'star',
+          });
+        }
+      }
+
+      function spawnExplosion(wx, y, power) {
+        const fireColors = ['#fff7ad', '#fde047', '#fb923c', '#ef4444', '#ffffff'];
+        const fireCount = Math.round(clamp(22 + power * 1.25, 28, 62));
+        for (let i = 0; i < fireCount; i++) {
+          const a = Math.random() * TAU;
+          const v = (2.8 + Math.random() * (4.8 + power * 0.11)) * scale;
+          particles.push({
+            wx, y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v - (1.0 + Math.random() * 1.8) * scale,
+            life: 30 + Math.random() * 22,
+            maxLife: 54,
+            r: (2.5 + Math.random() * 4.8) * scale,
+            color: fireColors[i % fireColors.length],
+            type: 'star',
+          });
+        }
+        for (let i = 0; i < 24; i++) {
+          const a = Math.random() * TAU;
+          const v = (0.8 + Math.random() * 3.4) * scale;
+          particles.push({
+            wx, y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v - 0.7 * scale,
+            life: 42 + Math.random() * 30,
+            maxLife: 72,
+            r: (5 + Math.random() * 9) * scale,
+            color: 'rgba(40, 40, 40, 0.72)',
+            type: 'puff',
+          });
+        }
+        particles.push({
+          wx, y,
+          vx: 0,
+          vy: 0,
+          life: 24,
+          maxLife: 24,
+          r: (24 + power * 1.6) * scale,
+          color: 'rgba(255, 255, 255, 0.92)',
+          type: 'ring',
+        });
+      }
+
+      function generateMines() {
+        mines = [];
+        nextMineMeters = 42 + Math.random() * 48;
+        ensureMines(origin.wx + Math.max(W * 4, pxPerMeter * 1400));
+      }
+
+      function ensureMines(toWx) {
+        if (!Number.isFinite(toWx) || !Number.isFinite(origin.wx)) return;
+        const targetMeters = Math.max(0, (toWx - origin.wx) / pxPerMeter + 120);
+        while (nextMineMeters < targetMeters && mines.length < 520) {
+          const jitter = (Math.random() - 0.5) * 18 * scale;
+          mines.push({
+            wx: origin.wx + nextMineMeters * pxPerMeter + jitter,
+            r: 15 + Math.random() * 5,
+            used: false,
+            seed: Math.random() * TAU,
+          });
+          // Иногда мины лежат группами, иногда — с большими промежутками.
+          const cluster = Math.random() < 0.24;
+          nextMineMeters += cluster ? 26 + Math.random() * 42 : 62 + Math.random() * 88;
+        }
+      }
+
+      function closestPointOnSegment(px, py, ax, ay, bx, by) {
+        const abx = bx - ax;
+        const aby = by - ay;
+        const len2 = abx * abx + aby * aby;
+        const t = len2 > 0 ? clamp(((px - ax) * abx + (py - ay) * aby) / len2, 0, 1) : 0;
+        const cx = ax + abx * t;
+        const cy = ay + aby * t;
+        return { cx, cy, t, dist: Math.hypot(px - cx, py - cy) };
+      }
+
+      function checkMineCollisions(prevWx, prevY) {
+        if (state !== 'flying') return false;
+        const minWx = Math.min(prevWx, classmate.wx) - 70 * scale;
+        const maxWx = Math.max(prevWx, classmate.wx) + 70 * scale;
+
+        for (const mine of mines) {
+          if (mine.used || mine.wx < minWx || mine.wx > maxWx) continue;
+          const mineY = groundY - 6 * scale;
+          const info = closestPointOnSegment(mine.wx, mineY, prevWx, prevY, classmate.wx, classmate.y);
+          const triggerRadius = mine.r * scale + classmate.r * 0.95;
+          // Срабатывает только рядом с землёй: высоко пролетающая одноклассник мину не цепляет.
+          const lowEnough = info.cy > groundY - (mine.r * scale + classmate.r * 2.35);
+          if (lowEnough && info.dist <= triggerRadius) {
+            triggerMine(mine, info.cx, info.cy);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function triggerMine(mine, hitX, hitY) {
+        if (mine.used) return false;
+        mine.used = true;
+
+        const incomingVx = classmate.vx;
+        const incomingVy = classmate.vy;
+        const dirSign = Math.sign(incomingVx) || 1;
+        const speed = Math.hypot(incomingVx, incomingVy) / scale;
+        const downward = Math.max(0, incomingVy / scale);
+        const horizontal = Math.abs(incomingVx) / scale;
+        const power = clamp(12 + speed * 0.42 + downward * 0.55 + horizontal * 0.12, 13, 31);
+
+        const sideAway = clamp((classmate.wx - mine.wx) / Math.max(1, mine.r * scale + classmate.r), -1, 1);
+        const rawDirX = sideAway * 0.42 + dirSign * (0.72 + Math.min(horizontal / 55, 0.34));
+        const rawDirY = -1.08 - clamp(downward / 34, 0, 0.35);
+        const len = Math.hypot(rawDirX, rawDirY) || 1;
+        const nx = rawDirX / len;
+        const ny = rawDirY / len;
+
+        classmate.y = Math.min(classmate.y, groundY - classmate.r - 10 * scale);
+        classmate.vx = incomingVx * 0.42 + nx * power * 1.34 * scale;
+        // При нормальном полёте слева направо мина не должна резко отправлять одноклассник назад.
+        if (dirSign > 0) classmate.vx = Math.max(classmate.vx, (8 + horizontal * 0.18) * scale);
+        classmate.vy = Math.min(incomingVy * 0.08, 0) + ny * power * 1.24 * scale;
+        classmate.spin = -classmate.vx / (10 * scale);
+        classmate.squish = 1;
+        classmate.bounces = Math.max(0, classmate.bounces - 1);
+
+        screenShake = Math.max(screenShake, clamp(power * 0.58, 8, 18));
+        flash = Math.max(flash, 0.72);
+        spawnExplosion(mine.wx, groundY - 8 * scale, power);
+        message = 'Бум! Мина подбросила одноклассника дальше!';
+        updateHud();
+        return true;
+      }
+
+      function updateHud() {
+        const shown = state === 'ended' ? finalDistance : distanceMeters;
+        distanceEl.textContent = Math.max(0, Math.floor(shown)).toString();
+        bestEl.textContent = Math.floor(best).toString();
+        hintEl.textContent = message;
+        if (state === 'ready') stateLabelEl.textContent = 'Готово';
+        else if (state === 'toss') stateLabelEl.textContent = 'Подброс';
+        else if (state === 'flying') stateLabelEl.textContent = 'Полёт';
+        else stateLabelEl.textContent = 'Финиш';
+
+        centerTipEl.textContent = message;
+        const showTip = state === 'ready' || state === 'toss' || state === 'ended';
+        centerTipEl.classList.toggle('hidden', !showTip);
+      }
+
+      function update(dt) {
+        windPhase += 0.01 * dt;
+        player.blink += dt;
+        if (player.blink > 190) player.blink = 0;
+
+        if (player.swing > 0) {
+          player.swingTime += dt;
+          player.swing = clamp(1 - player.swingTime / player.swingDuration, 0, 1);
+        }
+
+        if (state === 'toss' || state === 'flying') {
+          const prevWx = classmate.wx;
+          const prevY = classmate.y;
+          const gravity = (state === 'toss' ? 0.16 : 0.38) * scale;
+          classmate.vy += gravity * dt;
+
+          if (state === 'flying') {
+            const drag = Math.pow(0.996, dt);
+            classmate.vx *= drag;
+            classmate.vy *= Math.pow(0.999, dt);
+          }
+
+          classmate.wx += classmate.vx * dt;
+          classmate.y += classmate.vy * dt;
+          classmate.rot += classmate.spin * dt;
+          classmate.squish = Math.max(0, classmate.squish - 0.07 * dt);
+
+          if (state === 'toss' && classmate.y > groundY - classmate.r) {
+            classmate.y = groundY - classmate.r;
+            state = 'ended';
+            finalDistance = 0;
+            message = 'Одноклассник упал без удара. Тапните для новой попытки.';
+            spawnPuff(classmate.wx, groundY - 4 * scale, 12, '#e2e8f0', 2.2);
+            updateHud();
+          }
+
+          if (state === 'flying') {
+            ensureMines(classmate.wx + W * 2 + 900 * scale);
+            const current = (classmate.wx - origin.wx) / pxPerMeter;
+            distanceMeters = Math.max(0, current);
+
+            if (!checkMineCollisions(prevWx, prevY)) {
+              handleGroundCollision(dt);
+            }
+          }
+        }
+
+        if (state === 'ended') {
+          endTimer += dt;
+        }
+
+        // Camera follows the classmate after the hit.
+        const targetCamera = state === 'flying' || state === 'ended'
+          ? Math.max(0, classmate.wx - W * 0.36)
+          : 0;
+        cameraX = lerp(cameraX, targetCamera, 0.08 * dt);
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.life -= dt;
+          if (p.type !== 'ring') {
+            p.vy += (p.type === 'puff' ? 0.05 : 0.09) * scale * dt;
+            p.wx += p.vx * dt;
+            p.y += p.vy * dt;
+          }
+          if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        screenShake = Math.max(0, screenShake - 0.55 * dt);
+        flash = Math.max(0, flash - 0.045 * dt);
+
+        // HUD does not need 60 updates per second, but this is lightweight.
+        if (state === 'flying') updateHud();
+      }
+
+      function handleGroundCollision(dt) {
+        if (classmate.y <= groundY - classmate.r) return;
+
+        classmate.y = groundY - classmate.r;
+        const impactVy = Math.max(0, classmate.vy);
+        const vxAbs = Math.abs(classmate.vx);
+        const impact = impactVy + vxAbs * 0.18;
+        const realImpact = impactVy > 0.85 * scale || classmate.bounces === 0;
+
+        if (realImpact) {
+          classmate.bounces++;
+          classmate.squish = clamp(impact / (13 * scale), 0.18, 1);
+          spawnPuff(
+            classmate.wx,
+            groundY - 3 * scale,
+            Math.round(clamp(impact * 1.05, 5, 24)),
+            '#d7b98d',
+            2.35
+          );
+        }
+
+        const tooWeakForBounce = vxAbs < 1.45 * scale && impactVy < 1.45 * scale;
+        const shouldBounce = !tooWeakForBounce && classmate.bounces <= 18 && (
+          impactVy > 1.05 * scale ||
+          (classmate.bounces <= 1 && vxAbs > 2.65 * scale)
+        );
+
+        if (shouldBounce) {
+          const restitution = clamp(
+            0.24 + impactVy / (42 * scale) + vxAbs / (180 * scale),
+            classmate.bounces <= 1 ? 0.30 : 0.22,
+            0.56
+          );
+          // Горизонтальная скорость даёт «прыжок камешком»: даже слабый,
+          // но не совсем мёртвый удар получает один короткий отскок.
+          const skimLift = clamp(vxAbs * (classmate.bounces <= 1 ? 0.15 : 0.085), 0, (classmate.bounces <= 1 ? 2.6 : 1.6) * scale);
+          classmate.vy = -(impactVy * restitution + skimLift);
+          classmate.vx *= clamp(0.80 - classmate.bounces * 0.026, 0.50, 0.78);
+          classmate.spin = -classmate.vx / (15 * scale);
+          screenShake = Math.max(screenShake, clamp(impact * 0.55, 1.5, 8));
+        } else {
+          classmate.vy = 0;
+          classmate.vx *= Math.pow(0.88, dt);
+          classmate.spin *= Math.pow(0.82, dt);
+          if (Math.abs(classmate.vx) < 0.24 * scale || (classmate.bounces > 18 && impactVy < 0.7 * scale)) {
+            classmate.vx = 0;
+            classmate.spin = 0;
+            finishRun();
+          }
+        }
+      }
+
+      function finishRun() {
+        if (state === 'ended') return;
+        state = 'ended';
+        finalDistance = Math.max(0, Math.floor((classmate.wx - origin.wx) / pxPerMeter));
+        distanceMeters = finalDistance;
+        if (finalDistance > best) {
+          best = finalDistance;
+          storage.setBest(best);
+          message = `Новый рекорд: ${finalDistance} м! Тапните для новой игры.`;
+          spawnStarBurst(classmate.wx, classmate.y - 18 * scale, 26);
+        } else {
+          message = `Результат: ${finalDistance} м. Тапните для новой игры.`;
+        }
+        updateHud();
+      }
+
+      function draw() {
+        ctx.save();
+        if (screenShake > 0) {
+          const s = screenShake;
+          ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+        }
+        drawBackground();
+        drawWorldMarkers();
+        drawMines();
+        drawPlayer(player.wx - cameraX, groundY);
+        drawClassmate(classmate.wx - cameraX, classmate.y);
+        drawParticles();
+        if (flash > 0) drawFlash();
+        ctx.restore();
+      }
+
+      function roundedRect(x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+      }
+
+      function drawBackground() {
+        // «Зеркальная» бесконечная лента: normal → mirror → normal.
+        // На стыке стоят одинаковые крайние пиксели одной и той же картинки,
+        // поэтому задник сходится даже если в самом PNG левый и правый края различаются.
+        if (!backgroundImage.complete || !backgroundImage.naturalWidth) {
+          ctx.fillStyle = '#324d82';
+          ctx.fillRect(0, 0, W, H);
+          return;
+        }
+
+        const tileWidth = Math.ceil(H * backgroundImage.naturalWidth / backgroundImage.naturalHeight);
+        const parallax = cameraX * 0.36;
+        const firstTile = Math.floor(parallax / tileWidth);
+        const localOffset = parallax - firstTile * tileWidth;
+
+        for (let i = -1; i <= Math.ceil(W / tileWidth) + 1; i++) {
+          const tileNumber = firstTile + i;
+          const x = i * tileWidth - localOffset;
+          const mirrored = Math.abs(tileNumber) % 2 === 1;
+
+          if (mirrored) {
+            ctx.save();
+            ctx.translate(x + tileWidth, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(backgroundImage, 0, 0, tileWidth, H);
+            ctx.restore();
+          } else {
+            ctx.drawImage(backgroundImage, x, 0, tileWidth, H);
+          }
+        }
+      }
+
+      function drawCloud(x, y, k) {
+        k *= scale;
+        x = ((x % (W + 260 * k)) + (W + 260 * k)) % (W + 260 * k) - 130 * k;
+        ctx.save();
+        ctx.globalAlpha = 0.82;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, y, 18 * k, 0, TAU);
+        ctx.arc(x + 21 * k, y - 9 * k, 24 * k, 0, TAU);
+        ctx.arc(x + 50 * k, y, 20 * k, 0, TAU);
+        ctx.arc(x + 71 * k, y + 2 * k, 14 * k, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawWorldMarkers() {
+        const start = origin.wx;
+        const meterEvery = 50;
+        const spacing = meterEvery * pxPerMeter;
+        const first = Math.floor((cameraX - start) / spacing) - 1;
+        const last = Math.ceil((cameraX + W - start) / spacing) + 1;
+
+        // Стартовая пунктирная белая линия убрана: остаются только отметки дистанции.
+
+        for (let i = first; i <= last; i++) {
+          if (i <= 0) continue;
+          const meters = i * meterEvery;
+          const wx = start + i * spacing;
+          const x = wx - cameraX;
+          if (x < -60 || x > W + 60) continue;
+
+          ctx.save();
+          ctx.strokeStyle = 'rgba(120, 53, 15, 0.75)';
+          ctx.lineWidth = 4 * scale;
+          ctx.beginPath();
+          ctx.moveTo(x, groundY - 4 * scale);
+          ctx.lineTo(x, groundY - 45 * scale);
+          ctx.stroke();
+
+          ctx.fillStyle = '#fef3c7';
+          roundedRect(x - 27 * scale, groundY - 72 * scale, 54 * scale, 25 * scale, 8 * scale);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(120, 53, 15, 0.45)';
+          ctx.lineWidth = 1.2 * scale;
+          ctx.stroke();
+          ctx.fillStyle = '#7c2d12';
+          ctx.font = `800 ${12 * scale}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`${meters}м`, x, groundY - 59.5 * scale);
+          ctx.restore();
+        }
+      }
+
+      function drawMines() {
+        ctx.save();
+        for (const mine of mines) {
+          const x = mine.wx - cameraX;
+          const r = mine.r * scale;
+          if (x < -60 * scale || x > W + 60 * scale) continue;
+
+          if (mine.used) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(51, 24, 12, 0.55)';
+            ctx.beginPath();
+            ctx.ellipse(x, groundY + 2 * scale, r * 1.35, r * 0.34, 0, 0, TAU);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+            ctx.lineWidth = 1.5 * scale;
+            ctx.beginPath();
+            ctx.ellipse(x, groundY + 1 * scale, r * 1.08, r * 0.25, 0, 0, TAU);
+            ctx.stroke();
+            ctx.restore();
+            continue;
+          }
+
+          const bob = Math.sin(windPhase * 3 + mine.seed) * 0.8 * scale;
+          const y = groundY - 7 * scale + bob;
+
+          // Shadow
+          ctx.fillStyle = 'rgba(0,0,0,0.20)';
+          ctx.beginPath();
+          ctx.ellipse(x, groundY + 3 * scale, r * 1.15, r * 0.28, 0, 0, TAU);
+          ctx.fill();
+
+          // Spikes
+          ctx.strokeStyle = '#111827';
+          ctx.lineWidth = 3 * scale;
+          for (let i = 0; i < 8; i++) {
+            const a = i * TAU / 8 + mine.seed * 0.1;
+            const sx = x + Math.cos(a) * r * 0.65;
+            const sy = y - r * 0.55 + Math.sin(a) * r * 0.50;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(x + Math.cos(a) * r * 1.05, y - r * 0.55 + Math.sin(a) * r * 0.86);
+            ctx.stroke();
+          }
+
+          // Body
+          const grad = ctx.createRadialGradient(x - r * 0.32, y - r * 0.88, r * 0.2, x, y - r * 0.55, r * 1.1);
+          grad.addColorStop(0, '#64748b');
+          grad.addColorStop(0.45, '#1f2937');
+          grad.addColorStop(1, '#020617');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(x, y - r * 0.55, r * 0.82, 0, TAU);
+          ctx.fill();
+
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath();
+          ctx.arc(x - r * 0.18, y - r * 0.82, r * 0.18, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          ctx.beginPath();
+          ctx.arc(x - r * 0.42, y - r * 1.02, r * 0.13, 0, TAU);
+          ctx.fill();
+
+          // Fuse spark
+          ctx.strokeStyle = '#78350f';
+          ctx.lineWidth = 2 * scale;
+          ctx.beginPath();
+          ctx.moveTo(x + r * 0.35, y - r * 1.15);
+          ctx.quadraticCurveTo(x + r * 0.70, y - r * 1.55, x + r * 0.45, y - r * 1.82);
+          ctx.stroke();
+          ctx.fillStyle = Math.sin(windPhase * 18 + mine.seed) > 0 ? '#fde047' : '#fb923c';
+          drawStar(x + r * 0.45, y - r * 1.82, 3.6 * scale, ctx.fillStyle);
+        }
+        ctx.restore();
+      }
+
+      function drawPlayer(x, y) {
+        const s = scale;
+        const image = (state === 'ready' || state === 'toss') ? larBeforeImage : larAfterImage;
+        const height = 320 * s;
+        const width = height * 512 / 640;
+        if (x + width / 2 < -20 || x - width / 2 > W + 20) return;
+
+        // A small shadow keeps the cut-out visually anchored to the ground.
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath();
+        ctx.ellipse(x, y + 3 * s, width * 0.35, 9 * s, 0, 0, TAU);
+        ctx.fill();
+        if (image.complete && image.naturalWidth) {
+          ctx.drawImage(image, x - width / 2, y - height, width, height);
+        }
+        ctx.restore();
+      }
+
+      function drawClassmate(x, y) {
+        const s = scale;
+        const r = classmate.r;
+        const size = r * 2;
+        if (x < -size || x > W + size || y < -size || y > H + size) return;
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(classmate.rot);
+        const squish = classmate.squish;
+        ctx.scale(1 + 0.12 * squish, 1 - 0.16 * squish);
+
+
+        if (currentClassmateImage.complete && currentClassmateImage.naturalWidth) {
+          ctx.drawImage(currentClassmateImage, -size / 2, -size / 2, size, size);
+        } else {
+          ctx.fillStyle = '#f8fafc';
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 0.76, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawParticles() {
+        ctx.save();
+        for (const p of particles) {
+          const t = clamp(p.life / p.maxLife, 0, 1);
+          const x = p.wx - cameraX;
+          if (x < -80 || x > W + 80 || p.y < -100 || p.y > H + 100) continue;
+          ctx.globalAlpha = t;
+          if (p.type === 'ring') {
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 3.2 * scale * t;
+            ctx.beginPath();
+            ctx.arc(x, p.y, p.r * (1.8 - t), 0, TAU);
+            ctx.stroke();
+          } else if (p.type === 'star') {
+            drawStar(x, p.y, p.r * (0.7 + 0.8 * t), p.color);
+          } else {
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(x, p.y, p.r * (1.2 - t * 0.2), 0, TAU);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
+      function drawStar(x, y, r, color) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((x + y + performance.now() * 0.08) * 0.02);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + i * Math.PI / 5;
+          const rr = i % 2 === 0 ? r * 1.35 : r * 0.55;
+          ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawFlash() {
+        ctx.save();
+        ctx.globalAlpha = flash * 0.18;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
+
+      function loop(t) {
+        if (!lastTime) lastTime = t;
+        const dt = clamp((t - lastTime) / 16.6667, 0.25, 2.2);
+        lastTime = t;
+        update(dt);
+        draw();
+        rafId = requestAnimationFrame(loop);
+      }
+
+      resize();
+      resetGame();
+      bestEl.textContent = Math.floor(best).toString();
+      rafId = requestAnimationFrame(loop);
+
+      // Make sure the button is keyboard-usable on desktop too.
+      newGameBtn.addEventListener('click', ev => {
+        ev.preventDefault();
+        resetGame();
+      });
+      window.addEventListener('keydown', ev => {
+        if (ev.code === 'Space' || ev.code === 'Enter') {
+          ev.preventDefault();
+          if (state === 'ready') startToss();
+          else if (state === 'toss') swingBat();
+          else if (state === 'ended') resetGame();
+        }
+        if (ev.key.toLowerCase() === 'r') resetGame();
+      });
+    })();
+  </script>
+</body>
+</html>
+ended') resetGame();
+        }
+        if (ev.key.toLowerCase() === 'r') resetGame();
+      });
+    })();
+  </script>
+</body>
+</html>
