@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Переход…</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      background: #0b1020; color: #cbd5e1;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 15px; font-weight: 650; text-align: center; padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="msg">Переводим на новый адрес…</div>
+
+  <script>
+    (function () {
+      // Это страница-«перекидывалка» на github.io. Её единственная задача —
+      // прочитать СТАРЫЙ рекорд игрока из localStorage этого домена и передать
+      // его на новый сайт (pages.dev). Кода игры здесь НЕТ.
+
+      function readBest() {
+        try { return Number(window.localStorage.getItem('classmateFlightBest') || 0) || 0; }
+        catch (e) { return 0; }
+      }
+
+      function inFrame() {
+        try { return window.self !== window.top; } catch (e) { return true; }
+      }
+
+      var best = readBest();
+      // Новый адрес игры и домен, с которого открыли /куда надо вернуться.
+      var target = 'https://1225-8p5.pages.dev/';
+      var qs = new URLSearchParams(window.location.search);
+      var parentOrigin = qs.get('origin') || 'https://1225-8p5.pages.dev';
+
+      // ВАЖНО: не даём зациклиться. Если страницу открыли и сразу передали best,
+      // ставим метку, чтобы повторный заход не перенаправлял по кругу.
+      var done = false;
+      try { done = window.sessionStorage.getItem('__migrated__') === '1'; } catch (e) {}
+
+      if (inFrame()) {
+        // Открыты внутри iframe игры (кнопка «Обновить» на pages.dev).
+        // Просто отдаём рекорд родителю через postMessage. Сами не переходим.
+        var message = { type: 'record-transfer', best: best };
+        try { window.parent.postMessage(message, parentOrigin); } catch (e) {}
+        document.getElementById('msg').textContent = 'Проверяем старый рекорд…';
+      } else {
+        // Открыты напрямую (например, по старой ссылке в бо́те / в чате).
+        // Забираем рекорд и переводим игрока на новый сайт.
+        if (!done) {
+          try { window.sessionStorage.setItem('__migrated__', '1'); } catch (e) {}
+          var u = new URL(target);
+          if (best > 0) u.searchParams.set('best', String(best));
+          window.location.replace(u.toString());
+        } else {
+          document.getElementById('msg').textContent = 'Готово, переходим…';
+          window.location.replace(target);
+        }
+      }
+    })();
+  </script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a36a2848fba6c23b',t:'MTc4ODY2MjkzMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
